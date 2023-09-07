@@ -34,7 +34,7 @@ import (
 	"os"
 	"regexp"
 
-	"sourcegraph.com/sourcegraph/go-diff/diff"
+	"github.com/sourcegraph/go-diff/diff"
 )
 
 func usage() {
@@ -47,6 +47,7 @@ func usage() {
 var (
 	fflag   = flag.Bool("f", false, "grep file names instead of content")
 	vflag   = flag.Bool("v", false, "invert results")
+	xflag   = flag.Bool("x", false, "match whole hunk rather than any line")
 	dflag   = flag.Bool("d", false, "search deleted content")
 	iflag   = flag.Bool("i", false, "search inserted content")
 	aflag   = flag.Bool("a", false, "search context too")
@@ -137,23 +138,27 @@ func process(d *diff.FileDiff) *diff.FileDiff {
 func matchHunk(h *diff.Hunk) bool {
 	scan := bufio.NewScanner(bytes.NewReader(h.Body))
 	scan.Buffer(make([]byte, len(h.Body)), 0)
+	var matched bool
 	for scan.Scan() {
-		matched := false
 		line := scan.Bytes()
 		if len(line) == 0 {
 			continue
 		}
+		check := false
 		switch line[0] {
 		case '+':
-			matched = *iflag && pattern.Match(line[1:])
+			check = *iflag
 		case '-':
-			matched = *dflag && pattern.Match(line[1:])
+			check = *dflag
 		case ' ':
-			matched = *aflag && pattern.Match(line[1:])
+			check = *aflag
 		}
-		if matched {
+		if check {
+			matched = pattern.Match(line[1:])
+		}
+		if matched && !*xflag {
 			return true
 		}
 	}
-	return false
+	return matched
 }
